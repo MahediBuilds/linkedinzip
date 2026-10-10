@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Saved copies of the game page (they contain your LinkedIn session and profile)
+/*.html
+*_files/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Packed extension builds
+*.zip
+*.crx
+*.pem
