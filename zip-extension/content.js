@@ -1,5 +1,6 @@
-// Reads the Zip board from the page and solves it when the toolbar popup asks.
-// It never sends input to the game: you type the keys yourself.
+// Reads the Zip board when it appears, solves it and sends the moves to
+// auto_play.py, which presses the keys outside the browser. The page itself
+// never gets synthetic input from here.
 (() => {
   // Skip if a live copy is already running. A copy left behind by an extension
   // reload has a dead runtime (no id), so replace it.
@@ -105,25 +106,14 @@
 
   // ---------- Solving ----------
 
-  function moveName(from, to, cols) {
+  function moveLetter(from, to, cols) {
     const d = to - from;
-    return d === 1 ? "Right" : d === -1 ? "Left" : d === cols ? "Down" : "Up";
-  }
-
-  // Runs of the same key, e.g. Down Down Right -> [{dir:"Down",count:2,start:0}, ...]
-  function groupMoves(moves) {
-    const groups = [];
-    moves.forEach((dir, i) => {
-      const last = groups[groups.length - 1];
-      if (last && last.dir === dir) last.count++;
-      else groups.push({ dir, count: 1, start: i });
-    });
-    return groups;
+    return d === 1 ? "R" : d === -1 ? "L" : d === cols ? "D" : "U";
   }
 
   const boardKey = b => `${b.rows}x${b.cols}:${[...b.nums].join(",")}`;
 
-  // The current answer: { key, rows, cols, path, moves, groups, text }
+  // The current answer: { key, path, moves: "LDRR..." }
   let answer = null;
 
   // Solves the board on the page. Returns an error message, or null on success.
@@ -131,7 +121,7 @@
     const board = readBoard();
     if (!board) {
       answer = null;
-      return "No board yet. Press Start game, then Show answer.";
+      return "No board yet.";
     }
     const key = boardKey(board);
     if (answer?.key === key) return null; // already solved
@@ -149,37 +139,9 @@
       return "Couldn't find a solution.";
     }
     log(`Solved ${rows}x${cols} in ${(performance.now() - t0).toFixed(1)} ms`);
-
-    const moves = path.slice(1).map((to, i) => moveName(path[i], to, cols));
-    const groups = groupMoves(moves);
-    answer = {
-      key,
-      rows,
-      cols,
-      path,
-      moves,
-      groups,
-      text: groups.map(g => (g.count > 1 ? `${g.dir} ×${g.count}` : g.dir)).join(", "),
-    };
-    log("Answer:", moves.join(" "));
+    const moves = path.slice(1).map((to, i) => moveLetter(path[i], to, cols)).join("");
+    answer = { key, path, moves };
     return null;
-  }
-
-  // Machine-readable versions of the answer, for copying.
-  //   letters: "LDRRUU..."  (U/D/L/R, one per move)
-  //   words:   "Left Down Right Right ..."
-  //   json:    {"rows":7,"cols":7,"start":{"row":4,"col":4},"moves":"LDRR...","path":[[4,4],[4,3],...]}
-  const FORMATS = ["letters", "words", "json"];
-
-  function formatMoves(a, fmt) {
-    const letters = a.moves.map(m => m[0]).join("");
-    if (fmt === "words") return a.moves.join(" ");
-    if (fmt === "json") {
-      const rc = i => [Math.floor(i / a.cols), i % a.cols];
-      const [row, col] = rc(a.path[0]);
-      return JSON.stringify({ rows: a.rows, cols: a.cols, start: { row, col }, moves: letters, path: a.path.map(rc) });
-    }
-    return letters;
   }
 
   // How many moves of the answer have been played so far, or -1 if the trail
@@ -195,34 +157,72 @@
     return k - 1;
   }
 
-  // ---------- Messages from the toolbar popup ----------
+  // ---------- Status for the toolbar popup ----------
 
-  function summary(error) {
-    // LinkedIn is a single-page app: drop the answer if the puzzle changed.
-    const board = readBoard();
-    if (answer && (!board || boardKey(board) !== answer.key)) answer = null;
-    if (!answer) {
-      return { ok: true, status: error || "Press Show answer when the board is up.", answer: null };
-    }
-
-    const done = progress();
-    const total = answer.moves.length;
-    const status =
-      done === -1 ? "You've left the path. Undo back to it, or press Reset." :
-      done >= total ? "Solved!" :
-      `${total - done} moves left. Use the arrow keys on your keyboard.`;
-    return {
-      ok: true,
-      status,
-      answer: answer.text,
-      groups: answer.groups,
-      done,
-      formats: Object.fromEntries(FORMATS.map(f => [f, formatMoves(answer, f)])),
-    };
-  }
+  // One line about what happened on this page, e.g. "Sent 35 moves".
+  let status = /\/results\//.test(location.pathname) ? "Solved." : "Waiting for the board.";
+  const setStatus = s => { status = s; log(s); };
 
   chrome.runtime.onMessage.addListener((msg, sender, reply) => {
-    if (msg.kind === "zip-show") reply(summary(solveBoard()));
-    else if (msg.kind === "zip-status") reply(summary());
+    if (msg.kind === "zip-status") reply({ status });
   });
+
+  // ---------- Hand-off to auto_play.py ----------
+
+  const isZipPage = () => /^\/games\/(view\/)?zip/i.test(location.pathname);
+  const nextFrame = () => new Promise(r => requestAnimationFrame(r));
+  let sentKey = null;
+  let busy = false;
+
+  // Solve a newly loaded board and send its moves (via background.js) to
+  // auto_play.py. Does nothing if auto_play.py isn't running.
+  async function sendToPlayer() {
+    if (busy || !isZipPage() || !getGrid()) return;
+    const board = readBoard();
+    if (!board || boardKey(board) === sentKey) return;
+    sentKey = boardKey(board);
+    busy = true;
+    try {
+      // Let the board finish drawing first: walls come from CSS.
+      await nextFrame();
+      await nextFrame();
+      const error = solveBoard();
+      if (error) return setStatus(error);
+      sentKey = answer.key;
+      const done = progress();
+      if (done >= answer.moves.length) return setStatus("Already solved.");
+      if (done !== 0) return setStatus("Board already started, so nothing was sent.");
+      const res = await chrome.runtime.sendMessage({ kind: "zip-play", moves: answer.moves });
+      setStatus(res?.ok ? `Sent ${answer.moves.length} moves.` : "auto_play.py isn't running.");
+    } catch (e) {
+      setStatus(`Couldn't send the moves: ${e.message}`);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // Tell auto_play.py the extension is on a Zip page, so it can confirm the
+  // setup works before you press Start game.
+  let greeted = false;
+  function hello() {
+    if (greeted || !isZipPage()) return;
+    greeted = true;
+    chrome.runtime.sendMessage({ kind: "zip-hello" })
+      .then(res => log(res?.ok ? "Connected to auto_play.py."
+                               : `auto_play.py isn't running (${res?.error}).`))
+      .catch(e => log("Couldn't reach auto_play.py:", e.message));
+  }
+
+  // LinkedIn is a single-page app, so watch for the board instead of waiting
+  // for a page load.
+  let queued = false;
+  const observer = new MutationObserver(() => {
+    if (!chrome.runtime?.id) return observer.disconnect(); // extension reloaded
+    if (queued || !isZipPage()) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; hello(); sendToPlayer(); });
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  hello();
+  sendToPlayer();
 })();

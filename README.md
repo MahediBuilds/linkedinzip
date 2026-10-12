@@ -1,9 +1,17 @@
 # Zip Solver
 
-A solver for [LinkedIn's Zip](https://www.linkedin.com/games/zip/) puzzle. It comes in two parts:
+A solver for [LinkedIn's Zip](https://www.linkedin.com/games/zip/) puzzle. It has three parts:
 
-- **A Chrome extension.** It reads the board from the game page and shows the arrow keys that solve it. You type the keys yourself.
-- **A Python command-line solver.** It solves a grid you type into a text file and prints the path and the moves.
+- **A browser extension** for Chrome or Edge. It reads the board the moment it loads, solves it and hands the moves to `auto_play.py`.
+- **`auto_play.py`.** It presses those moves as real arrow keys, so the board is played as soon as it appears.
+- **A command-line solver.** It solves a grid you type into a text file and prints the path and the moves.
+
+## Quick start
+
+1. Install the Python dependency: `pip install -r requirements.txt`
+2. Load the extension in Chrome or Edge (see [Install](#install)).
+3. Run `python auto_play.py`. It checks the setup and opens Zip in your default browser.
+4. When it prints `[ok] Zip Solver connected`, press **Start game**. Keep the Zip tab in front while the keys are pressed.
 
 ## The puzzle
 
@@ -17,43 +25,37 @@ Draw one continuous path that:
 
 The solver uses a depth-first search with pruning. It checks that the remaining cells stay connected, that no cell is left as a dead end, and it tries the most constrained neighbour first (Warnsdorff's rule). A 7×7 board takes a few milliseconds.
 
-## Chrome extension
+## Browser extension
 
 ### Install
 
 1. Clone or download this repository.
-2. Open `chrome://extensions` in Chrome (or any Chromium browser, such as Edge, Brave or Arc).
-3. Turn on **Developer mode** (top right).
+2. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge (other Chromium browsers work too).
+3. Turn on **Developer mode**.
 4. Click **Load unpacked** and select the `zip-extension` folder.
-5. Optional: pin **Zip Solver** from the puzzle-piece menu so its icon stays on the toolbar.
+5. Optional: pin **Zip Solver** to the toolbar so you can see its status at a glance.
+
+To play in an Edge InPrivate or Chrome Incognito window, also turn on **Allow in InPrivate** (or **Allow in Incognito**) in the extension's details.
+
+After you update the extension's files, click its reload button on the extensions page, then reload the Zip tab.
 
 ### Use
 
-1. Open the [Zip game](https://www.linkedin.com/games/zip/) and press **Start game**.
-2. Click the **Zip Solver** icon on the toolbar.
-3. Click **Show answer**. The popup lists the moves in groups, for example `→ Right ×4`, `↓ Down ×2`.
-4. Click the board and press those arrow keys on your keyboard.
+Run [`auto_play.py`](#auto_playpy). The extension works by itself and has no buttons to press. Its toolbar popup only shows:
 
-More options in the popup:
+- whether `auto_play.py` is connected (green dot) or not running (red dot), and
+- on the Zip tab, what happened to the current board, for example `Sent 35 moves.` or `Already solved.`
 
-- **Show automatically** solves the board as soon as you open the popup.
-- **Progress:** reopen the popup at any point. Moves you've already played are dimmed and the next one is highlighted. If you've gone off the path, it tells you to undo.
-- **Copy** copies the answer in one of three formats:
-  - **Letters:** `LLUURRRRDDDD…`
-  - **Words:** `Left Left Up Up Right …`
-  - **JSON:** `{"rows":7,"cols":7,"start":{"row":3,"col":3},"moves":"LLUU…","path":[[3,3],[3,2],…]}`
-
-If you open the popup on any other page, it shows an **Open Zip** button instead.
+On any other page the popup offers an **Open Zip** button.
 
 ### Permissions
 
 | Permission | Why |
 |---|---|
-| `scripting` | Adds the board reader to the Zip tab when you open the popup |
-| `storage` | Remembers your *Show automatically* and copy-format choices |
-| `https://www.linkedin.com/*` | The only site the extension can read |
+| `https://www.linkedin.com/*` | The board reader runs on LinkedIn pages and wakes up on the Zip game |
+| `http://127.0.0.1/*` | Sends the moves to `auto_play.py` on your own computer |
 
-The extension sends nothing over the network and never presses keys for you. Nothing runs on a page until you open the popup there.
+The extension never presses keys itself and sends nothing anywhere except `127.0.0.1`.
 
 ## Python solver
 
@@ -114,9 +116,42 @@ python zip_solver.py "Zip _ LinkedIn.html"
 
 Walls aren't read from saved pages, so add them with `--walls`. A saved page contains your LinkedIn profile and session, so don't commit it. The `.gitignore` excludes `*.html` files in the repository root.
 
+## `auto_play.py`
+
+Plays the board the moment it loads. The keys are real OS key presses from Python ([PyAutoGUI](https://pyautogui.readthedocs.io/)), not events created inside the browser.
+
+```sh
+pip install -r requirements.txt
+python auto_play.py                    # opens Zip in your default browser (Chrome or Edge)
+python auto_play.py --browser chrome   # or pick one
+python auto_play.py --no-open          # don't open the page, just listen
+```
+
+Before the page opens, the script checks the setup:
+
+```
+[ok] Listening on port 8765.
+[ok] Zip Solver is loaded in Edge profile 'Default'.
+Opening https://www.linkedin.com/games/zip/ ...
+[ok] Zip Solver connected (Microsoft Edge). Press Start game.
+```
+
+1. **Port:** if another copy is already running, it stops and tells you.
+2. **Extension:** it finds the browser profile with Zip Solver loaded and opens Zip in that profile, which also skips Chrome's profile picker. If no profile has Zip Solver, it tells you how to load it.
+3. **Check-in:** when the Zip page loads, the extension says hello. If nothing arrives within 15 seconds, it lists what to check. The usual cause is an extension that wasn't reloaded after an update.
+
+Then press **Start game**. When the board appears, the extension solves it and sends the moves to `127.0.0.1:8765`, and `auto_play.py` presses them right away. You don't need to click the board or wait for a countdown.
+
+- The keys go to the focused window. The script waits up to `FOCUS_TIMEOUT` seconds for the active tab to be the Zip game (window title "Zip | LinkedIn ..."), then gives up without pressing anything.
+- The moves are spread over `TOTAL_TIME` from `play_moves.py`. `START_DELAY` adds a pause before the first key.
+- The moves are sent only when the trail is empty, so a board you've started or already finished is left alone.
+- `--profile "Profile 1"` opens a specific browser profile instead of the one where Zip Solver was found.
+
+> **Note:** automated input breaks [LinkedIn's User Agreement](https://www.linkedin.com/legal/user-agreement) and can get your account restricted. Use it at your own risk.
+
 ## `play_moves.py`
 
-`play_moves.py` types a move string as arrow-key presses into whichever window has focus. It uses [PyAutoGUI](https://pyautogui.readthedocs.io/).
+`play_moves.py` types a move string as arrow-key presses into whichever window has focus, for when you have the moves but not the extension. It uses [PyAutoGUI](https://pyautogui.readthedocs.io/).
 
 ```sh
 pip install -r requirements.txt
@@ -126,26 +161,30 @@ python play_moves.py LLUURRRRDDDD      # or plain letters
 
 You get 3 seconds to click into the target window, then all the keys are pressed within about 2 seconds. To change these timings, edit `START_DELAY` and `TOTAL_TIME` at the top of the file.
 
-> **Note:** automated input breaks [LinkedIn's User Agreement](https://www.linkedin.com/legal/user-agreement), which prohibits bots and other automated methods. Use this script only on your own copies of puzzles or other practice boards, not to submit scores on linkedin.com.
+> **Note:** the same User Agreement warning as for `auto_play.py` applies.
 
 ## Project layout
 
 ```
-zip-extension/      Chrome extension (Manifest V3)
+zip-extension/      browser extension (Manifest V3)
   manifest.json
-  popup.html/.js    toolbar popup: answer, progress, copy
-  content.js        reads the board from the page (injected on demand)
+  popup.html/.js    toolbar popup: connection and board status
+  content.js        reads the board from the page and sends new boards to auto_play.py
+  background.js     forwards the moves to auto_play.py on localhost
   solver.js         the solver (also loadable from Node via require)
 zip_solver.py       command-line solver
+auto_play.py        presses the moves sent by the extension as soon as a board loads
 play_moves.py       types a move string as arrow keys
 examples/           sample grids
 ```
 
 ## Troubleshooting
 
-- **"No board yet"**: press **Start game** first. The board isn't on the page until then.
+- **The popup says "auto_play.py not running"**: start `python auto_play.py`.
+- **The popup says "Reload this tab."**: the tab was opened before the extension was installed or reloaded. Reload it.
+- **`auto_play.py` says the extension never checked in**: reload Zip Solver on the extensions page, then reload the Zip tab. In an InPrivate or Incognito window, allow the extension there first.
+- **Keys were pressed but nothing happened on the board**: the Zip tab must be the active tab of the window in front. Keys go to whatever is on screen.
 - **"Couldn't find a solution"**: the extension may have misread a wall. Open DevTools (F12) and look for `[Zip Solver]` messages in the console. The extension retries without walls before it gives up.
-- **The popup says it can't reach the page**: reload the Zip tab and try again. This can happen right after you install or reload the extension.
 - **The extension stopped working after a LinkedIn update**: the board reader depends on LinkedIn's page markup (`data-cell-idx`, `data-testid="filled-cell"`, and so on). Please open an issue.
 
 ## Contributing

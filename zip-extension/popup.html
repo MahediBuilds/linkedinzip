@@ -3,45 +3,24 @@
 <head>
 <meta charset="utf-8">
 <style>
-  body { font: 13px system-ui, sans-serif; color: #1d2226; margin: 0; padding: 14px; width: 260px; }
-  h1 { font-size: 15px; margin: 0 0 10px; }
-  button { width: 100%; padding: 8px; border: 0; border-radius: 16px; cursor: pointer;
-           background: #0a66c2; color: #fff; font-weight: 600; font-size: 13px; }
+  body { font: 13px system-ui, sans-serif; color: #1d2226; margin: 0; padding: 12px 14px; width: 220px; }
+  h1 { font-size: 14px; margin: 0 0 8px; }
+  .row { display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #bbb; flex: none; }
+  .dot.on { background: #057642; }
+  .dot.off { background: #cc1016; }
+  #status { margin-top: 6px; color: #555; font-size: 12px; }
+  #status:empty { display: none; }
+  button { margin-top: 10px; width: 100%; padding: 6px; border: 0; border-radius: 14px; cursor: pointer;
+           background: #0a66c2; color: #fff; font-weight: 600; font-size: 12px; }
   button:hover { background: #004182; }
-  label { display: flex; gap: 6px; align-items: center; margin-top: 10px; cursor: pointer; }
-  .keys { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px;
-          max-height: 240px; overflow-y: auto; }
-  .key { border: 1px solid #ccc; border-radius: 6px; padding: 3px 6px; font-size: 12px;
-         white-space: nowrap; }
-  .key b { font-size: 14px; }
-  .key.done { opacity: .35; }
-  .key.next { border-color: #0a66c2; background: #e8f3ff; font-weight: 600; }
-  .copy { display: none; gap: 6px; margin-top: 10px; }
-  .copy.on { display: flex; }
-  .copy select { flex: 1; font-size: 12px; border-radius: 6px; border: 1px solid #ccc; }
-  .copy button { width: auto; padding: 5px 12px; }
-  #raw { margin-top: 6px; font: 11px ui-monospace, Consolas, monospace; background: #f3f6f8;
-         border-radius: 6px; padding: 6px; word-break: break-all; user-select: all;
-         max-height: 90px; overflow-y: auto; }
-  #raw:empty { display: none; }
-  #status { margin-top: 10px; color: #555; font-size: 12px; min-height: 16px; }
 </style>
 </head>
 <body>
   <h1>Zip Solver</h1>
-  <button id="main">Show answer</button>
-  <label><input type="checkbox" id="auto"> Show automatically</label>
-  <div class="keys" id="keys"></div>
-  <div class="copy" id="copyRow">
-    <select id="fmt">
-      <option value="letters">Letters (LDRR…)</option>
-      <option value="words">Words</option>
-      <option value="json">JSON</option>
-    </select>
-    <button id="copy">Copy</button>
-  </div>
-  <div id="raw"></div>
+  <div class="row"><span class="dot" id="dot"></span><span id="player">Checking auto_play.py…</span></div>
   <div id="status"></div>
+  <button id="open" hidden>Open Zip</button>
   <script src="popup.js"></script>
 </body>
 </html>

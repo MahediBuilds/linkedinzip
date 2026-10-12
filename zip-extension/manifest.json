@@ -1,10 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Zip Solver",
-  "version": "2.1.0",
-  "description": "Reads the LinkedIn Zip board and shows the arrow keys that solve it. You play the keys yourself.",
-  "permissions": ["storage", "scripting"],
-  "host_permissions": ["https://www.linkedin.com/*"],
+  "version": "2.3.0",
+  "description": "Solves the LinkedIn Zip board when it loads and hands the moves to auto_play.py.",
+  "host_permissions": ["https://www.linkedin.com/*", "http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.linkedin.com/*"],
+      "js": ["solver.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_title": "Zip Solver",
     "default_popup": "popup.html"

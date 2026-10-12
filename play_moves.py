@@ -7,6 +7,7 @@ Usage:
 
 After starting, you have a few seconds to click into the target window.
 """
+
 import random
 import re
 import sys
@@ -15,8 +16,8 @@ import time
 import pyautogui
 
 KEYS = {"L": "left", "D": "down", "R": "right", "U": "up"}
-START_DELAY = 3      # seconds to switch to the target window
-TOTAL_TIME = 2.1     # seconds from the first press to the last press
+START_DELAY = 3  # seconds to switch to the target window
+TOTAL_TIME = 2.001  # seconds from the first press to the last press
 
 pyautogui.PAUSE = 0
 
@@ -45,22 +46,31 @@ def parse_moves(text):
     text = "".join(text.split()).upper()
     bad = sorted(set(re.sub(r"\d", "", text)) - KEYS.keys())
     if bad:
-        sys.exit(f"Invalid characters: {''.join(bad)} (only L, D, R, U and counts allowed)")
+        sys.exit(
+            f"Invalid characters: {''.join(bad)} (only L, D, R, U and counts allowed)"
+        )
     if re.search(r"\d$", text):
         sys.exit("A count must be followed by a move, e.g. 3R.")
     return "".join(m * int(n or 1) for n, m in re.findall(r"(\d*)([LDRU])", text))
 
 
 def main():
-    moves = parse_moves(" ".join(sys.argv[1:]) if len(sys.argv) > 1 else input("Moves: "))
+    moves = parse_moves(
+        " ".join(sys.argv[1:]) if len(sys.argv) > 1 else input("Moves: ")
+    )
     if not moves:
         sys.exit("No moves given.")
-
-    intervals = random_intervals(len(moves) - 1, TOTAL_TIME)
 
     for i in range(START_DELAY, 0, -1):
         print(f"Starting in {i}...")
         time.sleep(1)
+
+    play(moves)
+
+
+def play(moves, total_time=TOTAL_TIME):
+    """Press the arrow keys for `moves` ("LLUR..."), spread over `total_time`."""
+    intervals = random_intervals(len(moves) - 1, total_time)
 
     # Schedule each press at an absolute time so press overhead doesn't
     # accumulate and the first-to-last span stays at TOTAL_TIME.
@@ -73,10 +83,12 @@ def main():
         pyautogui.press(KEYS[move])
     elapsed = time.perf_counter() - start
 
-    print(f"Done: pressed {len(moves)} keys in {elapsed:.3f}s "
-          f"(planned {sum(intervals):.3f}s, "
-          f"gaps {min(intervals, default=0) * 1000:.0f}-"
-          f"{max(intervals, default=0) * 1000:.0f} ms).")
+    print(
+        f"Done: pressed {len(moves)} keys in {elapsed:.3f}s "
+        f"(planned {sum(intervals):.3f}s, "
+        f"gaps {min(intervals, default=0) * 1000:.0f}-"
+        f"{max(intervals, default=0) * 1000:.0f} ms)."
+    )
 
 
 if __name__ == "__main__":
