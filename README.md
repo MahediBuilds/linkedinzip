@@ -2,14 +2,14 @@
 
 A solver for [LinkedIn's Zip](https://www.linkedin.com/games/zip/) puzzle. It has three parts:
 
-- **A browser extension** for Chrome or Edge. It reads the board the moment it loads, solves it and hands the moves to `auto_play.py`.
+- **A browser extension** for Chrome, Edge or Brave. It reads the board the moment it loads, solves it and hands the moves to `auto_play.py`.
 - **`auto_play.py`.** It presses those moves as real arrow keys, so the board is played as soon as it appears.
 - **A command-line solver.** It solves a grid you type into a text file and prints the path and the moves.
 
 ## Quick start
 
 1. Install the Python dependency: `pip install -r requirements.txt`
-2. Load the extension in Chrome or Edge (see [Install](#install)).
+2. Load the extension in Chrome, Edge or Brave (see [Install](#install)).
 3. Run `python auto_play.py`. It checks the setup and opens Zip in your default browser.
 4. When it prints `[ok] Zip Solver connected`, press **Start game**. Keep the Zip tab in front while the keys are pressed.
 
@@ -30,7 +30,7 @@ The solver uses a depth-first search with pruning. It checks that the remaining 
 ### Install
 
 1. Clone or download this repository.
-2. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge (other Chromium browsers work too).
+2. Open `chrome://extensions` in Chrome, `edge://extensions` in Edge or `brave://extensions` in Brave (other Chromium browsers work too).
 3. Turn on **Developer mode**.
 4. Click **Load unpacked** and select the `zip-extension` folder.
 5. Optional: pin **Zip Solver** to the toolbar so you can see its status at a glance.
@@ -122,8 +122,8 @@ Plays the board the moment it loads. The keys are real OS key presses from Pytho
 
 ```sh
 pip install -r requirements.txt
-python auto_play.py                    # opens Zip in your default browser (Chrome or Edge)
-python auto_play.py --browser chrome   # or pick one
+python auto_play.py                    # opens Zip in your default browser (Chrome, Edge or Brave)
+python auto_play.py --browser brave    # or pick one: chrome, edge, brave
 python auto_play.py --no-open          # don't open the page, just listen
 ```
 
