@@ -2,7 +2,7 @@
 
 Usage:
     python auto_play.py                   check, then open Zip in your default browser
-    python auto_play.py --browser chrome  ... or in Chrome (or edge)
+    python auto_play.py --browser chrome  ... or in Chrome (or edge, brave)
     python auto_play.py --no-open       don't open the page, just wait for it
 
 It checks the setup, opens the Zip game in the browser profile that has the
@@ -55,6 +55,16 @@ BROWSERS = {
         ],
         "profiles": r"%LocalAppData%\Microsoft\Edge\User Data",
         "extensions_page": "edge://extensions",
+    },
+    "brave": {
+        "name": "Brave",
+        "exe": [
+            r"%ProgramFiles%\BraveSoftware\Brave-Browser\Application\brave.exe",
+            r"%ProgramFiles(x86)%\BraveSoftware\Brave-Browser\Application\brave.exe",
+            r"%LocalAppData%\BraveSoftware\Brave-Browser\Application\brave.exe",
+        ],
+        "profiles": r"%LocalAppData%\BraveSoftware\Brave-Browser\User Data",
+        "extensions_page": "brave://extensions",
     },
 }
 
@@ -145,16 +155,23 @@ class Server(ThreadingHTTPServer):
 
 
 def default_browser():
-    """"chrome" or "edge", whichever Windows opens links in (else "edge")."""
+    """"chrome", "edge" or "brave", whichever Windows opens links in (else "edge")."""
     try:
         import winreg
-
-        key = (r"Software\Microsoft\Windows\Shell\Associations"
-               r"\UrlAssociations\https\UserChoice")
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
-            prog_id = winreg.QueryValueEx(k, "ProgId")[0].lower()
-    except (ImportError, OSError):
+    except ImportError:
         return "edge"
+    base = r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https"
+    # Newer Windows 11 builds keep the choice in UserChoiceLatest\ProgId.
+    prog_id = ""
+    for key in (base + r"\UserChoiceLatest\ProgId", base + r"\UserChoice"):
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key) as k:
+                prog_id = winreg.QueryValueEx(k, "ProgId")[0].lower()
+                break
+        except OSError:
+            continue
+    if prog_id.startswith("brave"):
+        return "brave"
     return "chrome" if prog_id.startswith("chrome") else "edge"
 
 
@@ -220,8 +237,8 @@ def wait_for_extension():
     print(
         f"[!!] No word from the Zip Solver extension after {HELLO_TIMEOUT}s. Check that:\n"
         "  - the Zip page has finished loading in this browser\n"
-        "  - Zip Solver is loaded in this browser profile (chrome://extensions or\n"
-        "    edge://extensions, Load unpacked > zip-extension)\n"
+        "  - Zip Solver is loaded in this browser profile (chrome://extensions,\n"
+        "    edge://extensions or brave://extensions, Load unpacked > zip-extension)\n"
         "  - you clicked its reload button after updating it, then reloaded the Zip tab\n"
         "  - in an InPrivate/Incognito window, the extension is allowed to run there\n"
         "Still listening: it connects as soon as the page loads with the extension."
