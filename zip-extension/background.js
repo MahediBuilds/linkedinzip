@@ -23,6 +23,7 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
   if (msg.kind === "zip-ping") call("/status").then(reply);
   else if (msg.kind === "zip-hello") call("/hello", { browser: browserName() }).then(reply);
   else if (msg.kind === "zip-play") call("/play", { moves: msg.moves }).then(reply);
+  else if (msg.kind === "zip-moved") call("/moved", {}).then(reply);
   else return;
   return true; // reply asynchronously
 });

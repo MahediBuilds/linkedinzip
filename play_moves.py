@@ -17,7 +17,7 @@ import pyautogui
 
 KEYS = {"L": "left", "D": "down", "R": "right", "U": "up"}
 START_DELAY = 3  # seconds to switch to the target window
-TOTAL_TIME = 2.001  # seconds from the first press to the last press
+TOTAL_TIME = 2.3  # seconds from the first press to the last press
 
 pyautogui.PAUSE = 0
 

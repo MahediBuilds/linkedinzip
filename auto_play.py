@@ -7,8 +7,9 @@ Usage:
 
 It checks the setup, opens the Zip game in the browser profile that has the
 Zip Solver extension, and waits for the extension on that page to check in. Then press Start game: as soon as the
-board appears, the extension solves it and sends the moves here, and they are
-pressed as real keys with PyAutoGUI. There is no countdown and no need to
+board can be played, the extension solves it and sends the moves here, and they
+are pressed as real keys with PyAutoGUI. The first key is pressed alone, and the
+rest follow once the board shows it. There is no countdown and no need to
 click into the window: the keys go to the focused window, which must be the
 LinkedIn one.
 """
@@ -24,11 +25,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pyautogui
 
-from play_moves import TOTAL_TIME, play
+from play_moves import KEYS, TOTAL_TIME, play
 
 PORT = 8765  # must match PLAYER_URL in zip-extension/background.js
 START_DELAY = 0.0  # seconds between the board appearing and the first key
 FOCUS_TIMEOUT = 5  # seconds to wait for the Zip tab to be focused
+FIRST_MOVE_TIMEOUT = 2  # seconds to wait for the board to show the first key
 HELLO_TIMEOUT = 15  # seconds to wait for the extension to check in
 ZIP_URL = "https://www.linkedin.com/games/zip/"
 
@@ -70,16 +72,22 @@ BROWSERS = {
 
 playing = threading.Lock()
 connected = threading.Event()
+first_move = threading.Event()  # the extension saw the first key on the board
 
 
 def zip_focused():
     # A browser window's title is its active tab's title ("Zip | LinkedIn ...
     # - Microsoft Edge"), so this also checks that the Zip tab is the one shown.
+    # Signed in, LinkedIn puts the notification count in front: "(11) Zip | ...".
     try:
         win = pyautogui.getActiveWindow()
     except Exception:
         return True  # can't check on this platform
-    return bool(win) and re.match(r"zip\b.*linkedin", win.title.strip(), re.I) is not None
+    return (
+        bool(win)
+        and re.match(r"(\(\d+\+?\)\s*)?zip\b.*linkedin", win.title.strip(), re.IGNORECASE)
+        is not None
+    )
 
 
 def run(moves):
@@ -95,7 +103,18 @@ def run(moves):
             time.sleep(0.02)
         time.sleep(START_DELAY)
         print(f"Board received, playing {len(moves)} moves...")
-        play(moves, TOTAL_TIME)
+        # Press one key and wait for the board to show it, so the rest don't
+        # pile up on a game that isn't taking input.
+        first_move.clear()
+        pyautogui.press(KEYS[moves[0]])
+        if not first_move.wait(FIRST_MOVE_TIMEOUT):
+            print(
+                f"The board didn't show the first move within {FIRST_MOVE_TIMEOUT}s, "
+                "so no more keys were pressed. Reload the Zip tab to try again."
+            )
+            return
+        if len(moves) > 1:
+            play(moves[1:], TOTAL_TIME)
     finally:
         playing.release()
 
@@ -122,8 +141,10 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/hello":
             # Sent by the extension each time a Zip page loads.
             connected.set()
-            print(f"[ok] Zip Solver connected ({body.get('browser') or 'browser'}). "
-                  "Press Start game.")
+            print(
+                f"[ok] Zip Solver connected ({body.get('browser') or 'browser'}). "
+                "Press Start game (or Resume) if the page shows it."
+            )
             return self.reply(200, {"ok": True})
 
         if self.path == "/play":
@@ -133,6 +154,10 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, {"ok": True})
             threading.Thread(target=run, args=(moves,), daemon=True).start()
             return
+
+        if self.path == "/moved":
+            first_move.set()
+            return self.reply(200, {"ok": True})
 
         self.reply(404, {"ok": False, "error": "not found"})
 
@@ -197,8 +222,12 @@ def zip_solver_profiles(browser):
                     exts = json.load(f).get("extensions", {}).get("settings", {})
             except (OSError, ValueError):
                 continue
-            paths = (str(e.get("path", "")) for e in exts.values() if isinstance(e, dict))
-            if any(os.path.normcase(p) == os.path.normcase(EXTENSION_DIR) for p in paths):
+            paths = (
+                str(e.get("path", "")) for e in exts.values() if isinstance(e, dict)
+            )
+            if any(
+                os.path.normcase(p) == os.path.normcase(EXTENSION_DIR) for p in paths
+            ):
                 found.append(name)
                 break
     return found
@@ -222,7 +251,9 @@ def open_zip(browser, profile):
             return False
         profile = profiles[0]
     elif profile not in profiles:
-        print(f"[!!] Zip Solver isn't loaded in the {info['name']} profile '{profile}'.")
+        print(
+            f"[!!] Zip Solver isn't loaded in the {info['name']} profile '{profile}'."
+        )
     if profile in profiles:
         print(f"[ok] Zip Solver is loaded in {info['name']} profile '{profile}'.")
     # Naming the profile also skips Chrome's profile picker.
@@ -247,26 +278,39 @@ def wait_for_extension():
 
 def main():
     ap = argparse.ArgumentParser(description="Play Zip boards sent by the extension.")
-    ap.add_argument("--browser", choices=list(BROWSERS), default=default_browser(),
-                    help="browser to open the Zip page in (default: your default browser)")
-    ap.add_argument("--profile",
-                    help="browser profile folder, e.g. Default or 'Profile 1' "
-                         "(default: the one with Zip Solver)")
-    ap.add_argument("--no-open", action="store_true",
-                    help="don't open the Zip page, just wait for it")
+    ap.add_argument(
+        "--browser",
+        choices=list(BROWSERS),
+        default=default_browser(),
+        help="browser to open the Zip page in (default: your default browser)",
+    )
+    ap.add_argument(
+        "--profile",
+        help="browser profile folder, e.g. Default or 'Profile 1' "
+        "(default: the one with Zip Solver)",
+    )
+    ap.add_argument(
+        "--no-open",
+        action="store_true",
+        help="don't open the Zip page, just wait for it",
+    )
     args = ap.parse_args()
 
     # Pre-run checks: the port must be free and PyAutoGUI able to see windows.
     try:
         server = Server(("127.0.0.1", PORT), Handler)
     except OSError:
-        raise SystemExit(f"[!!] Port {PORT} is in use: auto_play.py is probably "
-                         "already running in another window.")
+        raise SystemExit(
+            f"[!!] Port {PORT} is in use: auto_play.py is probably "
+            "already running in another window."
+        )
     try:
         pyautogui.getActiveWindow()
     except Exception as e:
-        print(f"[!!] Can't check which window is focused ({e}); keys will be "
-              "pressed into whatever window is in front.")
+        print(
+            f"[!!] Can't check which window is focused ({e}); keys will be "
+            "pressed into whatever window is in front."
+        )
     print(f"[ok] Listening on port {PORT}.")
 
     if not args.no_open and not open_zip(args.browser, args.profile):

@@ -140,11 +140,13 @@ Opening https://www.linkedin.com/games/zip/ ...
 2. **Extension:** it finds the browser profile with Zip Solver loaded and opens Zip in that profile, which also skips Chrome's profile picker. If no profile has Zip Solver, it tells you how to load it.
 3. **Check-in:** when the Zip page loads, the extension says hello. If nothing arrives within 15 seconds, it lists what to check. The usual cause is an extension that wasn't reloaded after an update.
 
-Then press **Start game**. When the board appears, the extension solves it and sends the moves to `127.0.0.1:8765`, and `auto_play.py` presses them right away. You don't need to click the board or wait for a countdown.
+Then press **Start game**. When the board can be played, the extension solves it and sends the moves to `127.0.0.1:8765`, and `auto_play.py` presses them right away. You don't need to click the board or wait for a countdown.
 
-- The keys go to the focused window. The script waits up to `FOCUS_TIMEOUT` seconds for the active tab to be the Zip game (window title "Zip | LinkedIn ..."), then gives up without pressing anything.
+- Signed in, LinkedIn can put the board on the page before the game has started, under a start, resume or loading screen. The extension waits until the page has loaded and nothing covers the board. The popup shows `Waiting for the board to be playable.` until then.
+- The first key is pressed alone. The rest follow once the extension sees it on the board. If it doesn't show within `FIRST_MOVE_TIMEOUT` seconds, nothing more is pressed.
+- The keys go to the focused window. The script waits up to `FOCUS_TIMEOUT` seconds for the active tab to be the Zip game (window title "Zip | LinkedIn ...", or "(3) Zip | LinkedIn ..." with notifications), then gives up without pressing anything.
 - The moves are spread over `TOTAL_TIME` from `play_moves.py`. `START_DELAY` adds a pause before the first key.
-- The moves are sent only when the trail is empty, so a board you've started or already finished is left alone.
+- A board that was already started on the solution's path, for example after a reload, is finished from where it is. If the trail is off the path, press **Reset** and it's played again. A finished board is left alone.
 - `--profile "Profile 1"` opens a specific browser profile instead of the one where Zip Solver was found.
 
 > **Note:** automated input breaks [LinkedIn's User Agreement](https://www.linkedin.com/legal/user-agreement) and can get your account restricted. Use it at your own risk.
@@ -183,6 +185,7 @@ examples/           sample grids
 - **The popup says "auto_play.py not running"**: start `python auto_play.py`.
 - **The popup says "Reload this tab."**: the tab was opened before the extension was installed or reloaded. Reload it.
 - **`auto_play.py` says the extension never checked in**: reload Zip Solver on the extensions page, then reload the Zip tab. In an InPrivate or Incognito window, allow the extension there first.
+- **The popup stays on "Waiting for the board to be playable."**: something is drawn over the board. Click Start game or Resume if it's there. Otherwise open DevTools (F12): the `[Zip Solver] The board is covered by` message names the element in the way.
 - **Keys were pressed but nothing happened on the board**: the Zip tab must be the active tab of the window in front. Keys go to whatever is on screen.
 - **"Couldn't find a solution"**: the extension may have misread a wall. Open DevTools (F12) and look for `[Zip Solver]` messages in the console. The extension retries without walls before it gives up.
 - **The extension stopped working after a LinkedIn update**: the board reader depends on LinkedIn's page markup (`data-cell-idx`, `data-testid="filled-cell"`, and so on). Please open an issue.
